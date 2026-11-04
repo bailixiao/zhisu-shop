@@ -317,7 +317,7 @@
       <h1 class="page-title">🛒 ${esc(g.name)}</h1>
       ${deadlineLine(g, now)}
       ${g.description ? `<p class="shop-desc">${Fmt.linkText(g.description)}</p>` : ''}
-      ${g.methods.length > 1 ? `<p class="shop-pickup-note">📦 領貨：${g.methods.map((m) => METHOD_LABEL[m]).join('、')}${g.methods.includes('配送') ? '（配送不收運費）' : ''}</p>` : ''}
+      ${g.methods.length > 1 ? `<p class="shop-pickup-note">📦 領貨：${g.methods.map((m) => METHOD_LABEL[m]).join('、')}</p>` : ''}
       ${g.pickups.length && g.methods.includes('出攤') ? `<p class="shop-pickup-note">${g.methods.length > 1 ? '🌿 出攤' : '📦 取貨'}：${g.pickups.map((p) => esc(pickupText(p))).join('、')}</p>` : ''}
       <ul class="shop-grid">${g.items.map((it) => {
         const soldOut = it.left === 0;
@@ -358,7 +358,7 @@
       <p class="shop-product-meta">已售出 ${it.sold}${it.left !== null ? `・${soldOut ? '已售完' : '剩 ' + it.left + ' ' + esc(it.unit || '份')}` : ''}${it.perPerson !== null ? `・每人最多 ${it.perPerson}` : ''}</p>
       ${deadlineLine(g, now)}
       ${it.description ? `<p class="shop-desc">${Fmt.linkText(it.description)}</p>` : ''}
-      ${it.options ? `<div class="shop-opt"><p class="shop-opt-label">${esc(it.options.label)}</p><div class="pos-chips">${it.options.options.map((o) => { const out = it.stockMode && !o.left; return `<label class="pos-chip${st.option === o.name ? ' is-checked' : ''}${out ? ' is-disabled' : ''}"><input type="radio" name="opt" value="${esc(o.name)}" data-opt${st.option === o.name ? ' checked' : ''}${out ? ' disabled' : ''}>${esc(o.name)}${o.price !== null && o.price !== it.price ? `<small>${money(o.price)}</small>` : ''}${it.stockMode ? `<small>${out ? '已售完' : o.left <= 5 ? '剩 ' + o.left : ''}</small>` : ''}</label>`; }).join('')}</div></div>` : ''}
+      ${it.options ? `<div class="shop-opt${st.needOpt ? ' is-missing' : ''}" data-opt-box><p class="shop-opt-label">${esc(it.options.label)}${st.needOpt ? `<strong class="shop-opt-need" role="alert">👇 請先選${esc(it.options.label)}</strong>` : ''}</p><div class="pos-chips">${it.options.options.map((o) => { const out = it.stockMode && !o.left; return `<label class="pos-chip${st.option === o.name ? ' is-checked' : ''}${out ? ' is-disabled' : ''}"><input type="radio" name="opt" value="${esc(o.name)}" data-opt${st.option === o.name ? ' checked' : ''}${out ? ' disabled' : ''}>${esc(o.name)}${o.price !== null && o.price !== it.price ? `<small>${money(o.price)}</small>` : ''}${it.stockMode ? `<small>${out ? '已售完' : o.left <= 5 ? '剩 ' + o.left : ''}</small>` : ''}</label>`; }).join('')}</div></div>` : ''}
       ${st.flash}
       <div class="shop-buybar">
         <div class="shop-stepper" role="group" aria-label="數量">
@@ -379,16 +379,22 @@
         root.querySelectorAll('.shop-gallery-dots span').forEach((d, k) => d.classList.toggle('is-on', k === i));
       }, { passive: true });
     }
-    root.querySelectorAll('[data-opt]').forEach((r) => r.addEventListener('change', () => redraw({ option: r.value, flash: '' })));
+    root.querySelectorAll('[data-opt]').forEach((r) => r.addEventListener('change', () => redraw({ option: r.value, flash: '', needOpt: false })));
     root.querySelector('[data-minus]').addEventListener('click', () => redraw({ qty: Math.max(qty - 1, 1), flash: '' }));
     root.querySelector('[data-plus]').addEventListener('click', () => redraw({ qty: qty + 1, flash: '' }));
     root.querySelector('[data-add]').addEventListener('click', () => {
-      if (it.options && !st.option) { redraw({ flash: `<div class="form-error" role="alert">請先選${esc(it.options.label)}</div>` }); return; }
+      // 還沒選口味：口味那區變紅、捲到看得到（2026/11/4：手機畫面小，提示在下面看不到，以為按了沒反應）
+      if (it.options && !st.option) {
+        redraw({ flash: '', needOpt: true });
+        const box = root.querySelector('[data-opt-box]');
+        if (box) { box.scrollIntoView({ block: 'center' }); box.classList.add('is-shake'); }
+        return;
+      }
       const lines = cartOf(g.id);
       const hit = lines.find((l) => l.id === it.id && (l.option || '') === (st.option || ''));
       if (hit) hit.qty = (Number(hit.qty) || 0) + qty; else lines.push({ id: it.id, option: st.option || '', qty });
       saveCart(g.id, lines);
-      redraw({ qty: 1, flash: `<div class="notice notice-success shop-added" role="status"><p>✅ 已加入購物車（${esc(it.name)}${st.option ? '・' + esc(st.option) : ''} × ${qty}）</p><p><a class="btn btn-small btn-primary" href="#/shop/${encodeURIComponent(g.id)}/cart">去結帳</a> <a class="btn btn-small" href="#/shop/${encodeURIComponent(g.id)}">繼續逛</a></p></div>` });
+      redraw({ qty: 1, needOpt: false, flash: `<div class="notice notice-success shop-added" role="status"><p>✅ 已加入購物車（${esc(it.name)}${st.option ? '・' + esc(st.option) : ''} × ${qty}）</p><p><a class="btn btn-small btn-primary" href="#/shop/${encodeURIComponent(g.id)}/cart">去結帳</a> <a class="btn btn-small" href="#/shop/${encodeURIComponent(g.id)}">繼續逛</a></p></div>` });
       const added = root.querySelector('.shop-added');
       if (added) added.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
@@ -467,13 +473,13 @@
           ${form.method === '自取' ? `<p class="hint">選在哪裡自取</p><div class="shop-pickups">${g.spots.map((s) => `<label class="choice${form.spot === s.name ? ' is-checked' : ''}"><input type="radio" name="spot" value="${esc(s.name)}"${form.spot === s.name ? ' checked' : ''}${closed ? ' disabled' : ''}>
             <span class="choice-main">${esc(s.name)}${s.note ? `<small>　🕕 ${esc(s.note)}</small>` : ''}</span>${s.address ? `<span class="choice-sub">📍 ${esc(s.address)}</span>` : ''}</label>`).join('')}</div>
           ${(() => { const ds = spotDates(g, now); return ds.length ? `<p class="hint">選哪一天自取</p><div class="shop-pickups shop-spot-dates">${ds.map((d) => `<label class="choice${form.spotDate === d ? ' is-checked' : ''}"><input type="radio" name="spotDate" value="${esc(d)}"${form.spotDate === d ? ' checked' : ''}${closed ? ' disabled' : ''}><span class="choice-main">${esc(Fmt.shortDate(d))}</span></label>`).join('')}</div>` : spotOf(g) && spotOf(g).dates.length ? '<p class="hint">這個地點的自取日期都過了，請選別的地點或問小編。</p>' : ''; })()}` : ''}
-          ${form.method === '配送' ? `${g.deliveryNote ? `<p class="hint">${esc(g.deliveryNote)}</p>` : ''}
+          ${form.method === '配送' ? `${g.deliveryNote || window.SITE.shopDeliveryNote ? `<p class="notice shop-delivery-note">🚚 ${esc(g.deliveryNote || window.SITE.shopDeliveryNote)}</p>` : ''}
           ${mem && mem.addresses.length ? `<p class="hint">寄到哪裡</p><div class="shop-pickups shop-addr-pick">${mem.addresses.map((a) => `<label class="choice${form.address === a.address ? ' is-checked' : ''}"><input type="radio" name="addrPick" value="${esc(a.id)}"${form.address === a.address ? ' checked' : ''}${closed ? ' disabled' : ''}>
             <span class="choice-main">${esc(a.label || '地址')}${a.name ? `<small>　${esc(a.name)}</small>` : ''}</span><span class="choice-sub">📍 ${esc(a.address)}</span></label>`).join('')}</div>` : ''}
-          <label class="form-row"><span>${mem && mem.addresses.length ? '或填新的地址' : '配送地址'}</span><input class="input" data-address maxlength="120" autocomplete="street-address" placeholder="例：新竹市○○路○號○樓" value="${esc(mem && mem.addresses.some((a) => a.address === form.address) ? '' : form.address)}"${closed ? ' disabled' : ''}></label>
+          <label class="form-row"><span>${mem && mem.addresses.length ? '或填新的地址／7-11 門市' : '配送地址或 7-11 門市'}</span><input class="input" data-address maxlength="120" autocomplete="street-address" placeholder="例：新竹市○○路○號○樓／新竹市 7-11 ○○門市" value="${esc(mem && mem.addresses.some((a) => a.address === form.address) ? '' : form.address)}"${closed ? ' disabled' : ''}></label>
           <label class="form-row"><span>方便收貨的時間（選填）</span><input class="input" data-dtime maxlength="40" placeholder="例：平日晚上七點後" value="${esc(form.deliveryTime)}"${closed ? ' disabled' : ''}></label>
           ${mem && form.address && !mem.addresses.some((a) => a.address === form.address) ? `<label class="check"><input type="checkbox" data-save-addr${form.saveAddr !== false ? ' checked' : ''}> 存到我的地址簿</label>` : ''}
-          <p class="hint">配送不收運費。</p>` : ''}
+          <p class="hint">運費沒有算在訂單金額裡，小編會再跟你確認。</p>` : ''}
         </section>` : ''}
         <section class="shop-step">
           <h2><span class="step">${n()}</span>怎麼付款</h2>
